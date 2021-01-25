@@ -119,10 +119,6 @@ def run(left_video, right_video, output, display=False):
 					# compute the (x, y)-coordinates of the bounding box for the object
 					box = detections[0, 0, i, 3:7] * np.array([W, H, W, H])
 					(startX, startY, endX, endY) = box.astype("int")
-					# cv2.rectangle(frame, (startX, startY), (endX, endY), (0, 255, 0), 2)
-					# text2 = "Confidence : {:0.2f}".format(confidence)
-					# print(f'confidence: {confidence}')
-					# cv2.putText(frame, text2, (startX,int(startY-10)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
 					# construct a dlib rectangle object from the bounding box coordinates and then start the dlib correlation tracker
 					tracker = dlib.correlation_tracker()
@@ -132,8 +128,7 @@ def run(left_video, right_video, output, display=False):
 					# add the tracker to our list of trackers so we can utilize it during skip frames
 					trackers.append(tracker)				
 
-		# otherwise, we should utilize our object *trackers* rather than object *detectors* to obtain a 
-		# higher frame processing throughput
+		# otherwise, we should utilize our object *trackers* rather than object *detectors* to obtain a higher frame processing throughput
 		else:
 			# loop over the trackers
 			for tracker in trackers:
@@ -152,13 +147,11 @@ def run(left_video, right_video, output, display=False):
 				# add the bounding box coordinates to the rectangles list
 				rects.append((startX, startY, endX, endY))
 
-		# draw a horizontal line in the center of the frame -- once an
-		# object crosses this line we will determine whether they were
+		# draw a horizontal line in the center of the frame -- once an object crosses this line we will determine whether they were
 		# moving 'up' or 'down'
 		cv2.line(frame, (0, H // 2), (W, H // 2), (0, 255, 255), 2)
 
-		# use the centroid tracker to associate the (1) old object
-		# centroids with (2) the newly computed object centroids
+		# use the centroid tracker to associate the (1) old object centroids with (2) the newly computed object centroids
 		objects = ct.update(rects)
 		
 		# loop over the tracked objects
@@ -169,13 +162,10 @@ def run(left_video, right_video, output, display=False):
 			if to is None:
 				to = TrackableObject(objectID, centroid)
 
-			# otherwise, there is a trackable object so we can utilize it
-			# to determine direction
+			# otherwise, there is a trackable object so we can utilize it to determine direction
 			else:
-				# the difference between the y-coordinate of the *current*
-				# centroid and the mean of *previous* centroids will tell
-				# us in which direction the object is moving (negative for
-				# 'up' and positive for 'down')
+				# the difference between the y-coordinate of the *current* centroid and the mean of *previous* centroids will tell
+				# us in which direction the object is moving (negative for 'up' and positive for 'down')
 				y = [c[1] for c in to.centroids]
 				direction = centroid[1] - np.mean(y)
 				to.centroids.append(centroid)
@@ -185,15 +175,13 @@ def run(left_video, right_video, output, display=False):
 	
 				# check to see if the object has been counted or not
 				if not to.counted:
-					# if the direction is negative (indicating the object
-					# is moving up) AND the centroid is above the center
+					# if the direction is negative (indicating the object is moving up) AND the centroid is above the center
 					# line, count the object
 					if direction < 0 and centroid[1] < H // 2:
 						totalUp += 1
 						to.counted = True
 
-					# if the direction is positive (indicating the object
-					# is moving down) AND the centroid is below the
+					# if the direction is positive (indicating the object is moving down) AND the centroid is below the
 					# center line, count the object
 					elif direction > 0 and centroid[1] > H // 2:
 						totalDown += 1
@@ -237,8 +225,8 @@ def run(left_video, right_video, output, display=False):
 
 		# show the output images
 		if display:
-			# cv2.imshow("Left Cam", left)
-			# cv2.imshow("Right Cam", right)
+			cv2.imshow("Left Cam", left)
+			cv2.imshow("Right Cam", right)
 			cv2.imshow("Result", frame)
 
 		# if the 'q' key was pressed, break from the loop
@@ -261,13 +249,12 @@ if __name__ == '__main__':
 	'''
 	# construct the argument parser and parse the arguments
 	ap = ArgumentParser()
-	ap.add_argument('--left-cam', help='path to left videos file or left webcam (0, 1, 2, ...)')
-	ap.add_argument('--right-cam', help='path to right videos file or right webcam (0, 1, 2, ...)')
-	ap.add_argument('--display', action='store_true', help='display result')
-	ap.add_argument("-o", "--output", type=str,
-	help="path to optional output video file")
+	ap.add_argument('-l', '--left-cam', help='path to left videos file or left webcam (0, 1, 2, ...)')
+	ap.add_argument('-r', '--right-cam', help='path to right videos file or right webcam (0, 1, 2, ...)')
+	ap.add_argument('-d', '--display', action='store_true', help='display result')
+	ap.add_argument('-o', '--output', type=str, help='path to optional output video file')
 	args = ap.parse_args()
-	left_video, right_video, display, output= args.left_cam, args.right_cam, args.display, args.output
+	left_video, right_video, display, output = args.left_cam, args.right_cam, args.display, args.output
 
 	# initialize the video streams and allow them to warmup
 	print('[INFO] starting camera...')
