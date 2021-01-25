@@ -1,0 +1,9 @@
+argumentparser
+DateTime
+dlib
+imutils
+numpy
+opencv-contrib-python
+opencv-python
+scipy
+times

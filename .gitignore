@@ -1,0 +1,21 @@
+# cache
+.cache
+.vscode
+__pycache__
+
+# environment
+.env
+env
+venv
+
+# file(s)
+*.mp4
+*.webm
+*.jp*g
+*.png
+*.gif
+
+# folder(s)
+model
+videos
+output
