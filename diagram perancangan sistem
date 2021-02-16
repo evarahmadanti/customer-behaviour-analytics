@@ -1,4 +1,4 @@
-<mxfile host="app.diagrams.net" modified="2021-02-16T05:03:46.975Z" agent="5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/88.0.4324.150 Safari/537.36 Edg/88.0.705.68" etag="auPswXogbPTu0L59r6mS" version="14.3.2" type="github" pages="2">
+<mxfile host="app.diagrams.net" modified="2021-02-16T05:08:13.303Z" agent="5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/88.0.4324.150 Safari/537.36 Edg/88.0.705.68" etag="5q3fEow6sDtWBk8WXsWz" version="14.3.2" type="github" pages="2">
   <diagram name="Page-1" id="c7558073-3199-34d8-9f00-42111426c3f3">
     <mxGraphModel dx="921" dy="1673" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="826" pageHeight="1169" background="#ffffff" math="0" shadow="0">
       <root>
@@ -242,6 +242,12 @@
         </mxCell>
         <mxCell id="N424GzFzm5KlFlQCH-PQ-38" value="Rata-rata&#xa;Jumlah Pengunjung" style="whiteSpace=wrap;align=center;verticalAlign=middle;fontStyle=1;strokeWidth=3;fillColor=#f8cecc;strokeColor=#b85450;fontSize=14;" vertex="1" parent="N424GzFzm5KlFlQCH-PQ-1">
           <mxGeometry x="617.4999999999999" y="800" width="90" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="N424GzFzm5KlFlQCH-PQ-48" value="" style="rounded=0;whiteSpace=wrap;html=1;fontSize=14;fillColor=none;dashed=1;" vertex="1" parent="N424GzFzm5KlFlQCH-PQ-1">
+          <mxGeometry x="231" y="328" width="530" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="N424GzFzm5KlFlQCH-PQ-49" value="" style="rounded=0;whiteSpace=wrap;html=1;fontSize=14;fillColor=none;dashed=1;" vertex="1" parent="N424GzFzm5KlFlQCH-PQ-1">
+          <mxGeometry x="240" y="773" width="500" height="120" as="geometry" />
         </mxCell>
       </root>
     </mxGraphModel>
