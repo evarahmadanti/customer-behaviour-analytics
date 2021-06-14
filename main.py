@@ -4,12 +4,16 @@ import datetime
 import numpy as np
 import dlib
 import cv2
+from imutils.video import FPS
 from argparse import ArgumentParser
 from module.stitcher import VideoStitcher
 from module.centroidtracker import CentroidTracker
 from module.trackableobject import TrackableObject
 
-def run(left_video, right_video, output, display=False):
+import cv2
+import numpy as np
+
+def run(left_video, right_video, output, left_save, right_save, display=False):
 	# initialize the image stitcher, detector, and
 	# total number of frames read
 	stitcher = VideoStitcher()
@@ -27,6 +31,10 @@ def run(left_video, right_video, output, display=False):
 
 	# initialize the video writer (we'll instantiate later if need be)
 	writer = None
+	writer_left = None
+	writer_right = None
+
+	fourcc = cv2.VideoWriter_fourcc(*"MJPG")
 
 	# initialize the frame dimensions (we'll set them as soon as we read
 	# the first frame from the video)
@@ -45,22 +53,29 @@ def run(left_video, right_video, output, display=False):
 	totalDown = 0
 	totalUp = 0
 
+	fps = FPS().start()
 	# loop over frames from the video streams
 	while True:
 		# grab the frames from their respective video streams
 		_, left = left_video.read()
 		_, right = right_video.read()
 
+		# # rotate
+		# left = cv2.rotate(left, cv2.ROTATE_180) 
+		# left = cv2.rotate(left, cv2.ROTATE_180)
+		# right = cv2.rotate(right, cv2.ROTATE_180)
+		# right = cv2.rotate(right, cv2.ROTATE_180) 
+
 		# resize the frames
-		left = imutils.resize(left, width=400)
-		right = imutils.resize(right, width=400)
+		# left = imutils.resize(left, width=400)
+		# right = imutils.resize(right, width=400)
 
 		# flip the video
 		# left = cv2.flip(left, 1)
 		# right = cv2.flip(right, 1)
 
 		# stitch the frames together to form the panorama
-		# IMPORTANT: you might have to change this line of code depending on 
+		# IMPORTANT: you might have to change this line of code depending on
 		# how your cameras are oriented; frames should be supplied in left-to-right order
 		stitched_frame = stitcher.stitch([left, right])
 
@@ -68,29 +83,37 @@ def run(left_video, right_video, output, display=False):
 		if stitched_frame is None:
 			print("[INFO] homography could not be computed")
 			break
-		
+
 		# resize the frame to have a maximum width of 500 pixels (the
 		# less data we have, the faster we can process it), then convert
 		# the frame from BGR to RGB for dlib
-		frame = imutils.resize(stitched_frame, height=300)
+		frame = imutils.resize(stitched_frame, height=200)
 		rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
 		# if the frame dimensions are empty, set them
 		if W is None or H is None:
 			(H, W) = frame.shape[:2]
-		
+			(HL, WL) = left.shape[:2]
+			(HR, WR) = right.shape[:2]
+
 		# if we are supposed to be writing a video to disk, initialize the writer
 		if output is not None and writer is None:
-			fourcc = cv2.VideoWriter_fourcc(*"MJPG")
-			writer = cv2.VideoWriter(output, fourcc, 30,
-				(W, H), True)
-			print("The video {} was saved", output)
+			writer = cv2.VideoWriter(output, fourcc, 10, (W, H), True)
+			print(f"The video {output} was saved")
 
-		# initialize the current status along with our list of bounding box rectangles returned by either (1) 
+		if left_save is not None and writer_left is None:
+			writer_left = cv2.VideoWriter(left_save, fourcc, 10, (WL, HL), True)
+			print(f"The video {left_save} was saved")
+
+		if right_save is not None and writer_right is None:
+			writer_right = cv2.VideoWriter(right_save, fourcc, 10, (WR, HR), True)
+			print(f"The video {right_save} was saved")
+
+		# initialize the current status along with our list of bounding box rectangles returned by either (1)
 		# our object detector or (2) the correlation trackers
 		status = "Waiting"
 		rects = []
-		
+
 		# check to see if we should run a more computationally expensive object detection method to aid our tracker
 		if total % 30 == 0:
 			# set the status and initialize our new set of object trackers
@@ -101,7 +124,7 @@ def run(left_video, right_video, output, display=False):
 			blob = cv2.dnn.blobFromImage(frame, 0.007843, (W, H), 127.5)
 			net.setInput(blob)
 			detections = net.forward()
-			
+
 			# loop over the detections
 			for i in np.arange(0, detections.shape[2]):
 				# extract the confidence (i.e., probability) associated with the prediction
@@ -111,11 +134,11 @@ def run(left_video, right_video, output, display=False):
 				if confidence > 0.4:
 					# extract the index of the class label from the detections list
 					idx = int(detections[0, 0, i, 1])
-					
+
 					# if the class label is not a person, ignore it
 					if CLASSES[idx] != "person":
 						continue
-					
+
 					# compute the (x, y)-coordinates of the bounding box for the object
 					box = detections[0, 0, i, 3:7] * np.array([W, H, W, H])
 					(startX, startY, endX, endY) = box.astype("int")
@@ -124,9 +147,9 @@ def run(left_video, right_video, output, display=False):
 					tracker = dlib.correlation_tracker()
 					rect = dlib.rectangle(startX, startY, endX, endY)
 					tracker.start_track(rgb, rect)
-				
+			
 					# add the tracker to our list of trackers so we can utilize it during skip frames
-					trackers.append(tracker)				
+					trackers.append(tracker)
 
 		# otherwise, we should utilize our object *trackers* rather than object *detectors* to obtain a higher frame processing throughput
 		else:
@@ -149,11 +172,11 @@ def run(left_video, right_video, output, display=False):
 
 		# draw a horizontal line in the center of the frame -- once an object crosses this line we will determine whether they were
 		# moving 'up' or 'down'
-		cv2.line(frame, (0, H // 2), (W, H // 2), (0, 255, 255), 2)
+		# cv2.line(frame, (0, H // 3), (W, H // 3), (0, 255, 255), 2)
 
 		# use the centroid tracker to associate the (1) old object centroids with (2) the newly computed object centroids
 		objects = ct.update(rects)
-		
+
 		# loop over the tracked objects
 		for (objectID, centroid) in objects.items():
 			# check to see if a trackable object exists for the current object ID
@@ -169,23 +192,27 @@ def run(left_video, right_video, output, display=False):
 				y = [c[1] for c in to.centroids]
 				direction = centroid[1] - np.mean(y)
 				to.centroids.append(centroid)
-				
+
 				for i in range(1, len(to.centroids)):
-					cv2.line(frame, tuple(to.centroids[i-1]), tuple(to.centroids[i]), (0, 0, 255), 1)
-	
+					cv2.line(frame, tuple(to.centroids[i-1]), tuple(to.centroids[i]), (0, 0, 255), 2)
+					# print(to.centroids[i])
+
 				# check to see if the object has been counted or not
 				if not to.counted:
 					# if the direction is negative (indicating the object is moving up) AND the centroid is above the center
 					# line, count the object
-					if direction < 0 and centroid[1] < H // 2:
+					if direction < 0 and centroid[1] < H // 3:
 						totalUp += 1
 						to.counted = True
 
 					# if the direction is positive (indicating the object is moving down) AND the centroid is below the
 					# center line, count the object
-					elif direction > 0 and centroid[1] > H // 2:
+					elif direction > 0 and centroid[1] > H // 3:
 						totalDown += 1
 						to.counted = True
+				
+				cv2.line(frame, tuple(to.centroids[i-1]), tuple(to.centroids[i]), (0, 0, 255), 2)
+
 
 			# store the trackable object in our dictionary
 			trackableObjects[objectID] = to
@@ -216,29 +243,43 @@ def run(left_video, right_video, output, display=False):
 		# check to see if we should write the frame to disk
 		if writer is not None:
 			writer.write(frame)
+			# writer_left.write(left)
+			# writer_right.write(right)
 
 		# increment the total number of frames read and draw the timestamp on the image
 		total += 1
 		timestamp = datetime.datetime.now()
 		ts = timestamp.strftime("%A %d %B %Y %I:%M:%S%p")
 		cv2.putText(frame, ts, (10, frame.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 0, 255), 1)
+		fps.update()
+		
+		def on_EVENT_LBUTTONDOWN(event, x, y, flags, param):
+			if event == cv2.EVENT_LBUTTONDOWN:
+				print(x,y)
 
 		# show the output images
 		if display:
 			cv2.imshow("Left Cam", left)
 			cv2.imshow("Right Cam", right)
+			cv2.namedWindow("Result")
+			cv2.setMouseCallback("Result", on_EVENT_LBUTTONDOWN)
 			cv2.imshow("Result", frame)
 
 		# if the 'q' key was pressed, break from the loop
 		if cv2.waitKey(1) & 0xFF == ord("q"):
 			break
 
+	fps.stop()
+	writer_left.release()
+	writer_right.release()
+	writer.release()
 	cv2.destroyAllWindows()
 	print('[INFO] cleaning up...')
+	print("[INFO] approx. FPS: {:.2f}".format(fps.fps()))
 
 if __name__ == '__main__':
 	''' Main function to run customer behaviour system
-	
+
 	Example of usage:
 	python main.py [args]
 
@@ -253,13 +294,18 @@ if __name__ == '__main__':
 	ap.add_argument('-r', '--right-cam', help='path to right videos file or right webcam (0, 1, 2, ...)')
 	ap.add_argument('-d', '--display', action='store_true', help='display result')
 	ap.add_argument('-o', '--output', type=str, help='path to optional output video file')
+	ap.add_argument('-lo', '--left-save', type=str, help='path to optional output video file')
+	ap.add_argument('-ro', '--right-save', type=str, help='path to optional output video file')
 	args = ap.parse_args()
-	left_video, right_video, display, output = args.left_cam, args.right_cam, args.display, args.output
+	left_video, right_video, display, output, left_save, right_save = args.left_cam, args.right_cam, args.display, args.output,  args.left_save, args.right_save
+	# display, output, left_save, right_save = args.display, args.output, args.left_save, args.right_save
 
 	# initialize the video streams and allow them to warmup
 	print('[INFO] starting camera...')
+	# left_video = cv2.VideoCapture(2, cv2.CAP_V4L2)
+	# right_video = cv2.VideoCapture(0, cv2.CAP_V4L2)
 	left_video = cv2.VideoCapture(left_video)
 	right_video = cv2.VideoCapture(right_video)
 
 	# run system
-	run(left_video, right_video, output, display=display)
+	run(left_video, right_video, output, left_save, right_save, display=display)

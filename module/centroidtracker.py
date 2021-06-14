@@ -30,7 +30,7 @@ class CentroidTracker:
 		sec = int(sec % 60)
 		hours = int(mins // 60)
 		mins = int(mins % 60)
-		print(f"Elapsed Time: {hours}:{mins}:{sec}")
+		print(f"Elapsed Time ID {self.nextObjectID}: {hours}:{mins}:{sec}")
 
 	def register(self, centroid):
 		# when registering an object we use the next available object ID 
@@ -86,7 +86,8 @@ class CentroidTracker:
 		for (i, (startX, startY, endX, endY)) in enumerate(rects):
 			# use the bounding box coordinates to derive the centroid
 			cX = int((startX + endX) / 2.0)
-			cY = int((startY + endY) / 2.0)
+			# cY = int((startY + endY) / 2.0)
+			cY = int(endY)
 			inputCentroids[i] = (cX, cY)
 			# print("track", startX, startY, endX, endY)
 
