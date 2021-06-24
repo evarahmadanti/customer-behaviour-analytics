@@ -4,20 +4,25 @@ import datetime
 import numpy as np
 import dlib
 import cv2
+from database.config import connection
 from imutils.video import FPS
 from argparse import ArgumentParser
 from module.stitcher import VideoStitcher
 from module.centroidtracker import CentroidTracker
 from module.trackableobject import TrackableObject
 
-import cv2
-import numpy as np
-
 def run(left_video, right_video, output, left_save, right_save, display=False):
 	# initialize the image stitcher, detector, and
 	# total number of frames read
 	stitcher = VideoStitcher()
 	total = 0
+	
+	# Get the start time
+	system_start = time.time()
+
+	# creating database connection
+	mydb = connection()
+	cursor = mydb.cursor()
 
 	# initialize the list of class labels MobileNet SSD was trained to detect
 	CLASSES = ["background", "aeroplane", "bicycle", "bird", "boat",
@@ -30,16 +35,12 @@ def run(left_video, right_video, output, left_save, right_save, display=False):
 	net = cv2.dnn.readNetFromCaffe('model/mobilenet_ssd/MobileNetSSD_deploy.prototxt', 'model/mobilenet_ssd/MobileNetSSD_deploy.caffemodel')
 
 	# initialize the video writer (we'll instantiate later if need be)
-	writer = None
-	writer_left = None
-	writer_right = None
-
+	writer, writer_left, writer_right = None, None, None
 	fourcc = cv2.VideoWriter_fourcc(*"MJPG")
 
 	# initialize the frame dimensions (we'll set them as soon as we read
 	# the first frame from the video)
-	W = None
-	H = None
+	W, H = None, None
 
 	# instantiate our centroid tracker, then initialize a list to store
 	# each of our dlib correlation trackers, followed by a dictionary to
@@ -50,25 +51,51 @@ def run(left_video, right_video, output, left_save, right_save, display=False):
 
 	# initialize the total number of frames processed thus far, along
 	# with the total number of objects that have moved either up or down
-	totalDown = 0
-	totalUp = 0
+	# totalDown = 0
+	# totalUp = 0
+
+	totalLeft = 0
+	totalRight = 0
+
+	counter = 0
+	counter2 = 0
 
 	fps = FPS().start()
+
+	# Polygon1 corner points coordinates
+	pts = np.array([[175, 38], [277, 63],
+					[249, 198], [126, 165],], np.int32)
+	pts = pts.reshape((-1, 1, 2))
+
+	# Polygon2 corner points coordinates
+	pts2 = np.array([[275, 47], [379, 46],
+					[432, 197], [268, 195],], np.int32)
+	pts2 = pts2.reshape((-1, 1, 2))
+
+	# White color in BGR
+	color = (255, 255, 255)
+
+	def on_EVENT_LBUTTONDOWN(event, x, y, flags, param):
+		if event == cv2.EVENT_LBUTTONDOWN:
+			print(x,y)
+
+	def send_data():
+		cust_data = ct.get_data()
+		for row in cust_data:
+			# executing the query with values
+			cursor.execute(f"INSERT INTO customer_data_detail (id_object, tanggal_masuk, elapsed_time) VALUES ({row['id']}, '{row['entry_date']}', {row['elapsed_time']})")
+		mydb.commit()  # to make final output we have to run the 'commit()' method of the database object
+		print(cursor.rowcount, "record inserted")
+
 	# loop over frames from the video streams
 	while True:
 		# grab the frames from their respective video streams
 		_, left = left_video.read()
 		_, right = right_video.read()
 
-		# # rotate
-		# left = cv2.rotate(left, cv2.ROTATE_180) 
+		# rotate
 		# left = cv2.rotate(left, cv2.ROTATE_180)
 		# right = cv2.rotate(right, cv2.ROTATE_180)
-		# right = cv2.rotate(right, cv2.ROTATE_180) 
-
-		# resize the frames
-		# left = imutils.resize(left, width=400)
-		# right = imutils.resize(right, width=400)
 
 		# flip the video
 		# left = cv2.flip(left, 1)
@@ -177,6 +204,18 @@ def run(left_video, right_video, output, left_save, right_save, display=False):
 		# use the centroid tracker to associate the (1) old object centroids with (2) the newly computed object centroids
 		objects = ct.update(rects)
 
+		#declare mat1 and mat2 as a single channel as a requirements of the bitwiseAsnd algorithm
+		frameH, frameW= frame.shape[:2]
+		mat1 = np.zeros((frameH, frameW, 1), dtype = "uint8") 
+		mat2 = np.zeros((frameH, frameW, 1), dtype = "uint8") 
+		mat_left = np.zeros((frameH, frameW, 1), dtype = "uint8") 
+		mat3 = np.zeros((frameH, frameW, 1), dtype = "uint8") 
+		mat_right = np.zeros((frameH, frameW, 1), dtype = "uint8")
+
+		# draw poly inside mat1 for left area & mat 3 for right area
+		left_area = cv2.fillPoly(mat1, [pts], color)
+		right_area = cv2.fillPoly(mat3, [pts2], color)
+
 		# loop over the tracked objects
 		for (objectID, centroid) in objects.items():
 			# check to see if a trackable object exists for the current object ID
@@ -198,21 +237,61 @@ def run(left_video, right_video, output, left_save, right_save, display=False):
 					# print(to.centroids[i])
 
 				# check to see if the object has been counted or not
-				if not to.counted:
-					# if the direction is negative (indicating the object is moving up) AND the centroid is above the center
-					# line, count the object
-					if direction < 0 and centroid[1] < H // 3:
-						totalUp += 1
-						to.counted = True
+				if not to.counted or not to.counted2:
+					# # if the direction is negative (indicating the object is moving up) AND the centroid is above the center
+					# # line, count the object
+					# if direction < 0 and centroid[1] < H // 4:
+					# 	totalUp += 1
+					# 	to.counted = True
 
-					# if the direction is positive (indicating the object is moving down) AND the centroid is below the
-					# center line, count the object
-					elif direction > 0 and centroid[1] > H // 3:
-						totalDown += 1
-						to.counted = True
-				
+					# # if the direction is positive (indicating the object is moving down) AND the centroid is below the
+					# # center line, count the object
+					# if direction > 0 and centroid[1] > H // 4:
+					# 	totalDown += 1
+					# 	to.counted = True
+					
+					# if the centroid enter the poly, then count the object
+					left_area = cv2.countNonZero(mat_left)
+					# print("l:",left_area)
+					if left_area > 0:
+						counter += 1
+						if counter >= 50:
+							totalLeft += 1
+							counter = 0
+							to.counted = True
+						# print("1 :", counter)
+
+					right_area = cv2.countNonZero(mat_right)
+					# print("r",right_area)
+					if right_area > 0:
+						counter2 += 1
+						if counter2 >= 50:
+							totalRight += 1
+							counter2 = 0
+							to.counted2 = True
+						# print("2 :", counter2)
+					
+					# if (268 < centroid[0] < 424) and (30 < centroid[1] < 199):
+					# 	counter += 1
+					# 	if counter >= 50:
+					# 		totalRight += 1
+					# 		counter = 0
+					# 		to.counted = True
+					# 	else :
+					# 		pass
+					# 	print(counter)
+
+					# if (268 < centroid[0] < 374 and 67 > centroid[0] > 58) or (268 < centroid[1] < 442 and 164 < centroid[1] < 199):
+					# 	counter += 1
+					# 	print(counter)
+					# 	if counter >= 5:
+					# 		totalLeft += 1
+					# 		counter = 0
+					# 		to.counted = True
+					# 	else :
+					# 		pass
+
 				cv2.line(frame, tuple(to.centroids[i-1]), tuple(to.centroids[i]), (0, 0, 255), 2)
-
 
 			# store the trackable object in our dictionary
 			trackableObjects[objectID] = to
@@ -220,7 +299,12 @@ def run(left_video, right_video, output, left_save, right_save, display=False):
 			# draw both the ID of the object and the centroid of the object on the output frame
 			text = "ID {}".format(objectID)
 			cv2.putText(frame, text, (centroid[0] - 10, centroid[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-			cv2.circle(frame, (centroid[0], centroid[1]), 4, (0, 255, 0), -1)
+			#cv2.circle(frame, (centroid[0], centroid[1]), 4, (255, 255, 255), -1)
+			cv2.circle(mat2, (centroid[0], centroid[1]), 4, color, -1)
+
+			#merge mat1 and mat2 to check whether the centroid inside the poly or not
+			mat_left = cv2.bitwise_and(mat1, mat2)
+			mat_right = cv2.bitwise_and(mat3, mat2)
 
 			for i, (startX, startY, endX, endY) in enumerate(rects):
 				cv2.rectangle(frame, (startX, startY), (endX, endY), (0, 255, 0), 2)
@@ -229,9 +313,9 @@ def run(left_video, right_video, output, left_save, right_save, display=False):
 
 		# construct a tuple of information we will be displaying on the frame
 		info = [
-			("Exit", totalUp),
-			("Entry", totalDown),
-			("Status", status),
+			# ("Exit", totalUp),
+			("Total Right", totalRight),
+			("Total Left", totalLeft),
 		]
 
 		# loop over the info tuples and draw them on our frame
@@ -253,17 +337,24 @@ def run(left_video, right_video, output, left_save, right_save, display=False):
 		cv2.putText(frame, ts, (10, frame.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 0, 255), 1)
 		fps.update()
 		
-		def on_EVENT_LBUTTONDOWN(event, x, y, flags, param):
-			if event == cv2.EVENT_LBUTTONDOWN:
-				print(x,y)
+		# handler for send data to db
+		system_stop = round(time.time() - system_start)
+		if system_stop != 0 and system_stop % 60 == 0: #store data in 24 hours means 86400 sec
+			send_data()
+			time.sleep(1)
+			# reset all data
+			totalLeft, totalRight = 0, 0
+			system_start = time.time()
 
 		# show the output images
 		if display:
 			cv2.imshow("Left Cam", left)
 			cv2.imshow("Right Cam", right)
-			cv2.namedWindow("Result")
-			cv2.setMouseCallback("Result", on_EVENT_LBUTTONDOWN)
+			# cv2.namedWindow("Result")
+			# cv2.setMouseCallback("Result", on_EVENT_LBUTTONDOWN)
 			cv2.imshow("Result", frame)
+			cv2.imshow("mat Left", mat_left)
+			cv2.imshow("mat Right", mat_right)
 
 		# if the 'q' key was pressed, break from the loop
 		if cv2.waitKey(1) & 0xFF == ord("q"):
@@ -274,6 +365,7 @@ def run(left_video, right_video, output, left_save, right_save, display=False):
 	writer_right.release()
 	writer.release()
 	cv2.destroyAllWindows()
+	#lokasi ngirim 
 	print('[INFO] cleaning up...')
 	print("[INFO] approx. FPS: {:.2f}".format(fps.fps()))
 

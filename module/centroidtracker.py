@@ -25,12 +25,20 @@ class CentroidTracker:
 		# distance we'll start to mark the object as "disappeared"
 		self.maxDistance = maxDistance
 
+		# store the total entry
+		self.totalCustomer = 0
+
+		# store the elapsed time from object entry to exit
+		self.elapsed_time = 0
+
+		self.totalData = []
+
 	def time_convert(self, sec):
 		mins = int(sec // 60)
 		sec = int(sec % 60)
 		hours = int(mins // 60)
 		mins = int(mins % 60)
-		print(f"Elapsed Time ID {self.nextObjectID}: {hours}:{mins}:{sec}")
+		# print(f"Elapsed Time ID {self.nextObjectID}: {hours}:{mins}:{sec}")
 
 	def register(self, centroid):
 		# when registering an object we use the next available object ID 
@@ -38,24 +46,35 @@ class CentroidTracker:
 		self.objects[self.nextObjectID] = centroid
 		
 		# get time of entry
-		self.entry_time = ["Entry Time of ID {}: {}".format(self.nextObjectID, datetime.now())]
-		print(self.entry_time)
+		# self.entry_time = ["Entry Time of ID {}: {}".format(self.nextObjectID, datetime.now())]
+		
+		self.entry_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 		self.start_time = time.time()
 
 		self.disappeared[self.nextObjectID] = 0
 		self.nextObjectID += 1
+		self.totalCustomer += 1
 
 	def deregister(self, objectID):
 		# to deregister an object ID we delete the object ID from
 		# both of our respective dictionaries
 		del self.objects[objectID]
 		del self.disappeared[objectID]
+
 		# get time of out
 		self.exit_time = ["Exit Time of ID {}: {}".format(objectID, datetime.now())]
-		print(self.exit_time)
-		end_time = time.time()
-		elapsed_time = end_time - self.start_time
-		self.time_convert(elapsed_time)
+		# print(self.exit_time)
+
+		self.elapsed_time = time.time() - self.start_time
+		self.time_convert(self.elapsed_time)
+
+		# make the data dict
+		data = {
+			"id": self.nextObjectID,
+			"elapsed_time": self.elapsed_time,
+			"entry_date": self.entry_date,
+		}
+		self.totalData.append(data)
 
 	def update(self, rects):
 		# The format of the rects  parameter is assumed to be a tuple with 
@@ -187,3 +206,11 @@ class CentroidTracker:
 
 		# return the set of trackable objects
 		return self.objects
+
+	def get_data(self):
+		# store to totalData
+		totalData = self.totalData
+		# reset all data
+		self.nextObjectID, self.totalCustomer = 0, 0
+		self.totalData = []
+		return totalData
