@@ -1,0 +1,7 @@
+# directory
+env
+.cache
+__pycache__
+
+# file
+*.sw*

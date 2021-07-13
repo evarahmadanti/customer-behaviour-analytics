@@ -1,0 +1,10 @@
+# directory
+.cache
+__pycache__
+
+# file
+*.sw*
+*.ini
+
+# except
+!*.ini.example

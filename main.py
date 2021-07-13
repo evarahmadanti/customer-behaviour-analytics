@@ -1,15 +1,22 @@
-import time
-import imutils
+# Run and Debug like this
+# python3 main.py -l videos/cut_rexiiii2.avi -r videos/cut_relxiiii2.avi  -o output/result_percobaan_xiiii.avi --display
+
 import datetime
-import numpy as np
-import dlib
-import cv2
-from database.config import connection
-from imutils.video import FPS
+import random
+import time
 from argparse import ArgumentParser
-from module.stitcher import VideoStitcher
+
+import cv2
+import dlib
+import imutils
+import numpy as np
+from imutils.video import FPS
+
+from database.config import connection
 from module.centroidtracker import CentroidTracker
+from module.stitcher import VideoStitcher
 from module.trackableobject import TrackableObject
+
 
 def run(left_video, right_video, output, left_save, right_save, display=False):
 	# initialize the image stitcher, detector, and
@@ -53,12 +60,17 @@ def run(left_video, right_video, output, left_save, right_save, display=False):
 	# with the total number of objects that have moved either up or down
 	# totalDown = 0
 	# totalUp = 0
+	rand = random.randint(150, 230)
+	print(rand)
 
 	totalLeft = 0
 	totalRight = 0
 
 	counter = 0
 	counter2 = 0
+
+	idxLockLeft = 0
+	idxLockRight = 0
 
 	fps = FPS().start()
 
@@ -79,13 +91,41 @@ def run(left_video, right_video, output, left_save, right_save, display=False):
 		if event == cv2.EVENT_LBUTTONDOWN:
 			print(x,y)
 
-	def send_data():
+	def varians(cust_data, mean_elapse_time, total_data):
+		varians_elapsed_time = 0
+		for data in cust_data:
+			varians_elapsed_time += ((data['elapsed_time']-mean_elapse_time)**2)
+		varians_elapsed_time = varians_elapsed_time / total_data
+		return varians_elapsed_time
+
+	def send_data(totalLeft, totalRight):
 		cust_data = ct.get_data()
+		total_data = len(cust_data)
+		date_now = datetime.date.today()
+		day_now = timestamp.strftime("%A")
+		total_elapsed_time = 0
 		for row in cust_data:
 			# executing the query with values
 			cursor.execute(f"INSERT INTO customer_data_detail (id_object, tanggal_masuk, elapsed_time) VALUES ({row['id']}, '{row['entry_date']}', {row['elapsed_time']})")
+			total_elapsed_time += row['elapsed_time']
+		
+		# get the mean & variance data of elapsed time
+		mean_elapsed_time = total_elapsed_time / total_data
+		varians_elapsed_time = varians(cust_data, mean_elapsed_time, total_data)
+		
+		# store the general data to mysql
+		cursor.execute(f"INSERT INTO customer_data_total (day, date, total_visitor, mean_elapsed_time, varians_elapsed_time, total_rack_a, total_rack_b) VALUES ('{day_now}', '{date_now}', '{total_data}', '{mean_elapsed_time}', '{varians_elapsed_time}', '{totalLeft}', '{totalRight}')")
 		mydb.commit()  # to make final output we have to run the 'commit()' method of the database object
 		print(cursor.rowcount, "record inserted")
+		
+		# reset the rack data
+		totalLeft, totalRight = 0, 0
+
+		#stop the system
+		writer_left.release()
+		writer_right.release()
+		writer.release()
+		cv2.destroyAllWindows()
 
 	# loop over frames from the video streams
 	while True:
@@ -102,8 +142,8 @@ def run(left_video, right_video, output, left_save, right_save, display=False):
 		# right = cv2.flip(right, 1)
 
 		# stitch the frames together to form the panorama
-		# IMPORTANT: you might have to change this line of code depending on
-		# how your cameras are oriented; frames should be supplied in left-to-right order
+		# IMPORTANT: you might have to change this line of code depending on how your cameras are oriented; 
+		# frames should be supplied in left-to-right order
 		stitched_frame = stitcher.stitch([left, right])
 
 		# no homograpy could be computed
@@ -111,8 +151,7 @@ def run(left_video, right_video, output, left_save, right_save, display=False):
 			print("[INFO] homography could not be computed")
 			break
 
-		# resize the frame to have a maximum width of 500 pixels (the
-		# less data we have, the faster we can process it), then convert
+		# resize the frame to have a maximum width of 500 pixels (the less data we have, the faster we can process it), then convert
 		# the frame from BGR to RGB for dlib
 		frame = imutils.resize(stitched_frame, height=200)
 		rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -216,6 +255,36 @@ def run(left_video, right_video, output, left_save, right_save, display=False):
 		left_area = cv2.fillPoly(mat1, [pts], color)
 		right_area = cv2.fillPoly(mat3, [pts2], color)
 
+		# draw centroid of each object
+		inc = 0
+		tempX1 = 0
+		tempObj1 = 0
+		tempX2 = 0
+		tempObj2 = 0
+
+		for (objectID, centroid) in objects.items():
+			cv2.circle(mat2, (centroid[0], centroid[1]), 4, color, -1)	
+			if(inc == 0):
+				tempX1 = centroid[0]
+				tempObj1 = objectID
+			else:
+				tempX2 = centroid[0]
+				tempObj2 = objectID
+			inc = inc + 1
+
+		if(tempX1 > tempX2):
+			idxLockLeft = tempObj1
+			idxLockRight = tempObj2
+		else:
+			idxLockLeft = tempObj2
+			idxLockRight = tempObj1
+
+		mat_left = cv2.bitwise_and(mat1, mat2)
+		mat_right = cv2.bitwise_and(mat3, mat2)
+
+		temp_left_area = cv2.countNonZero(mat_left)
+		temp_right_area = cv2.countNonZero(mat_right)
+
 		# loop over the tracked objects
 		for (objectID, centroid) in objects.items():
 			# check to see if a trackable object exists for the current object ID
@@ -238,58 +307,19 @@ def run(left_video, right_video, output, left_save, right_save, display=False):
 
 				# check to see if the object has been counted or not
 				if not to.counted or not to.counted2:
-					# # if the direction is negative (indicating the object is moving up) AND the centroid is above the center
-					# # line, count the object
-					# if direction < 0 and centroid[1] < H // 4:
-					# 	totalUp += 1
-					# 	to.counted = True
-
-					# # if the direction is positive (indicating the object is moving down) AND the centroid is below the
-					# # center line, count the object
-					# if direction > 0 and centroid[1] > H // 4:
-					# 	totalDown += 1
-					# 	to.counted = True
-					
-					# if the centroid enter the poly, then count the object
-					left_area = cv2.countNonZero(mat_left)
-					# print("l:",left_area)
-					if left_area > 0:
+					if (temp_left_area > 0 and not to.counted and idxLockLeft != objectID):
 						counter += 1
 						if counter >= 50:
 							totalLeft += 1
 							counter = 0
 							to.counted = True
-						# print("1 :", counter)
 
-					right_area = cv2.countNonZero(mat_right)
-					# print("r",right_area)
-					if right_area > 0:
+					if (temp_right_area > 0 and not to.counted2 and idxLockRight != objectID):
 						counter2 += 1
 						if counter2 >= 50:
 							totalRight += 1
 							counter2 = 0
 							to.counted2 = True
-						# print("2 :", counter2)
-					
-					# if (268 < centroid[0] < 424) and (30 < centroid[1] < 199):
-					# 	counter += 1
-					# 	if counter >= 50:
-					# 		totalRight += 1
-					# 		counter = 0
-					# 		to.counted = True
-					# 	else :
-					# 		pass
-					# 	print(counter)
-
-					# if (268 < centroid[0] < 374 and 67 > centroid[0] > 58) or (268 < centroid[1] < 442 and 164 < centroid[1] < 199):
-					# 	counter += 1
-					# 	print(counter)
-					# 	if counter >= 5:
-					# 		totalLeft += 1
-					# 		counter = 0
-					# 		to.counted = True
-					# 	else :
-					# 		pass
 
 				cv2.line(frame, tuple(to.centroids[i-1]), tuple(to.centroids[i]), (0, 0, 255), 2)
 
@@ -299,12 +329,6 @@ def run(left_video, right_video, output, left_save, right_save, display=False):
 			# draw both the ID of the object and the centroid of the object on the output frame
 			text = "ID {}".format(objectID)
 			cv2.putText(frame, text, (centroid[0] - 10, centroid[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-			#cv2.circle(frame, (centroid[0], centroid[1]), 4, (255, 255, 255), -1)
-			cv2.circle(mat2, (centroid[0], centroid[1]), 4, color, -1)
-
-			#merge mat1 and mat2 to check whether the centroid inside the poly or not
-			mat_left = cv2.bitwise_and(mat1, mat2)
-			mat_right = cv2.bitwise_and(mat3, mat2)
 
 			for i, (startX, startY, endX, endY) in enumerate(rects):
 				cv2.rectangle(frame, (startX, startY), (endX, endY), (0, 255, 0), 2)
@@ -336,25 +360,24 @@ def run(left_video, right_video, output, left_save, right_save, display=False):
 		ts = timestamp.strftime("%A %d %B %Y %I:%M:%S%p")
 		cv2.putText(frame, ts, (10, frame.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 0, 255), 1)
 		fps.update()
-		
+	
 		# handler for send data to db
 		system_stop = round(time.time() - system_start)
-		if system_stop != 0 and system_stop % 60 == 0: #store data in 24 hours means 86400 sec
-			send_data()
+		if system_stop != 0 and system_stop % rand == 0: #store data in 24 hours means 86400 sec
+			send_data(totalLeft, totalRight)
 			time.sleep(1)
 			# reset all data
-			totalLeft, totalRight = 0, 0
 			system_start = time.time()
 
 		# show the output images
 		if display:
-			cv2.imshow("Left Cam", left)
-			cv2.imshow("Right Cam", right)
+			# cv2.imshow("Left Cam", left)
+			# cv2.imshow("Right Cam", right)
 			# cv2.namedWindow("Result")
 			# cv2.setMouseCallback("Result", on_EVENT_LBUTTONDOWN)
 			cv2.imshow("Result", frame)
-			cv2.imshow("mat Left", mat_left)
-			cv2.imshow("mat Right", mat_right)
+			# cv2.imshow("mat Left", mat_left)
+			# cv2.imshow("mat Right", mat_right)
 
 		# if the 'q' key was pressed, break from the loop
 		if cv2.waitKey(1) & 0xFF == ord("q"):

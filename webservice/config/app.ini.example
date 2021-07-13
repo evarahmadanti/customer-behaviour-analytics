@@ -1,0 +1,3 @@
+[app]
+db=  # what DB what do you want
+storage=  # is this for local or online

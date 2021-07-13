@@ -1,0 +1,6 @@
+[mysql]
+host=  # database host, e.g. localhost
+port=  # database port, fill blank if you want to use default
+user=  # database username
+password=  # database password
+db=  # database name
